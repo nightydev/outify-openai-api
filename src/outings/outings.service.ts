@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { GenerateOutingsDto } from './dto/generate-outings.dto';
 import { OpenaiService } from 'src/openai/openai.service';
+import { GeneratedOutingsResponse } from './interfaces/generated-outings.interface';
 
 @Injectable()
 export class OutingsService {
@@ -8,10 +9,65 @@ export class OutingsService {
 
   async generateOutings(
     generateOutingsDto: GenerateOutingsDto,
-  ): Promise<string> {
+  ): Promise<GeneratedOutingsResponse> {
+    const prompt = JSON.stringify(generateOutingsDto, null, 2);
+
     const response = await this.openaiService.createResponse(
-      'Saluda a Jose Terán',
+      `Basada en la siguiente información, genera 3 titulares de salidas con una breve descripción de cada uno. Utiliza un tono amigable y atractivo. Tu respuesta debe estar **exclusivamente** en formato JSON con esta estructura exacta:
+
+{
+  "outings": [
+    {
+      "title": "Título 1",
+      "description": "Descripción breve 1"
+    },
+    {
+      "title": "Título 2",
+      "description": "Descripción breve 2"
+    },
+    {
+      "title": "Título 3",
+      "description": "Descripción breve 3"
+    }
+  ]
+}
+
+No añadas ningún texto extra fuera de este JSON.
+
+Información: ${prompt}
+`,
     );
-    return `Outings generated with the following data: ${JSON.stringify(generateOutingsDto)} | Response from OpenAI: ${response.output_text}`;
+
+    try {
+      // Manejar la respuesta de forma segura
+      let responseText: string;
+
+      if (typeof response === 'string') {
+        responseText = response;
+      } else if (
+        response &&
+        typeof response === 'object' &&
+        'output_text' in response
+      ) {
+        // Nueva API de OpenAI con formato de respuesta completo
+        responseText = response.output_text;
+      } else if (response && typeof response === 'object') {
+        // Fallback: Si es un objeto de OpenAI sin output_text, convertir a JSON
+        responseText = JSON.stringify(response);
+      } else {
+        throw new Error('Invalid response format from OpenAI service');
+      }
+
+      const outings = JSON.parse(responseText) as GeneratedOutingsResponse;
+      return outings;
+    } catch (error) {
+      console.error(
+        'Error parsing OpenAI response:',
+        error,
+        'Response:',
+        response,
+      );
+      throw new Error('Failed to parse OpenAI response as JSON');
+    }
   }
 }
